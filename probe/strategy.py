@@ -89,6 +89,7 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "vtype": vtype,
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
+                "pair_id": bp.get("pair_id"),
                 "payload": bp.get("payload"),
             })
     elif "sqli" in vtype:
@@ -104,6 +105,7 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "vtype": vtype,
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
+                "pair_id": bp.get("pair_id"),
                 "payload": bp.get("payload"),
             })
     return records
@@ -170,7 +172,7 @@ def build_tasks(
             used_payloads: set[str] = set()
             point_label = f"{_base_url(action).split('/')[-1]}_{name}"
 
-            def _emit(payload: str, vtype: str, rec_type, family, _label=point_label) -> None:
+            def _emit(payload: str, vtype: str, rec_type, family, pair_id=None, _label=point_label) -> None:
                 nonlocal tid
                 if not payload or payload in used_payloads:
                     return
@@ -191,15 +193,15 @@ def build_tasks(
                     "base_value": value,
                     "payload": payload,
                     "enctype": target.get("enctype", ""),
-                    "meta": {"vuln_type": vtype, "type": rec_type, "family": family},
+                    "meta": {"vuln_type": vtype, "type": rec_type, "family": family, "pair_id": pair_id},
                 })
                 tid += 1
 
             for vtype in vuln_types:
                 for rec in flat.get(vtype, []):
                     if isinstance(rec, dict):
-                        _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"))
+                        _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
                 for rec in _get_baseline_records_by_type(vtype):
-                    _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"))
+                    _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
 
     return out

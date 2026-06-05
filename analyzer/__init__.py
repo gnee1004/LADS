@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+import os
+
 from .sqli_analyzer import validate_sqli, detect_boolean_group, detect_orderby_group, detect_probe_group
 from .xss_analyzer  import validate_xss
 from .bac_analyzer  import validate_bac, detect_bac_group
-from utilities import load_json, save_json
 from findings import (
     make_finding,
     MODULE_XSS, MODULE_SQLI, MODULE_BAC,
@@ -120,10 +122,13 @@ def run(
     output_file: str = "results/findings.json",
     progress_callback=None,
 ) -> list[dict]:
-    results = load_json(input_file, [])
+    with open(input_file, encoding="utf-8") as f:
+        results = json.load(f)
 
     findings = validate(results, progress_callback=progress_callback)
 
-    save_json(output_file, findings)
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(findings, f, ensure_ascii=False, indent=2)
 
     return findings

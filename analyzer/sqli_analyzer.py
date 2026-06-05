@@ -96,6 +96,10 @@ def _vuln_type(r: dict) -> str:
     return ((r.get("meta") or {}).get("vuln_type") or "").lower()
 
 
+def _pair_id(r: dict) -> str:
+    return str(((r.get("meta") or {}).get("pair_id") or "")).strip()
+
+
 def _body_length(r: dict) -> int:
     body = r.get("response_body") or ""
     return len(body)
@@ -163,7 +167,8 @@ def detect_boolean_group(results: list[dict]) -> list[dict]:
 
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in sqli_results:
-        key = (r.get("url"), r.get("inject_param"))
+        pair_id = _pair_id(r)
+        key = (r.get("url"), r.get("inject_param"), pair_id or "__legacy_boolean__")
         groups[key].append(r)
 
     detected: list[dict] = []

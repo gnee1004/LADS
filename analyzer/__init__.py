@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .sqli_analyzer import validate_sqli, detect_boolean_group, detect_orderby_group, detect_probe_group
+from .sqli_analyzer import validate_sqli, detect_boolean_group, detect_orderby_group, detect_probe_group, detect_time_group
 from .xss_analyzer  import validate_xss
 from .bac_analyzer  import validate_bac, detect_bac_group
 from utilities import load_json, save_json
@@ -14,7 +14,7 @@ from findings import (
 __all__ = [
     "run", "validate",
     "validate_sqli", "validate_xss", "validate_bac",
-    "detect_boolean_group", "detect_orderby_group", "detect_probe_group", "detect_bac_group",
+    "detect_boolean_group", "detect_orderby_group", "detect_probe_group", "detect_time_group", "detect_bac_group",
 ]
 
 
@@ -103,7 +103,7 @@ def validate(results: list[dict], progress_callback=None) -> list[dict]:
             found_ids.add(r.get("id"))
 
     # Phase 2: 그룹 분석
-    for detector in [detect_boolean_group, detect_probe_group, detect_orderby_group, detect_bac_group]:
+    for detector in [detect_boolean_group, detect_time_group, detect_probe_group, detect_orderby_group, detect_bac_group]:
         for item in detector(results):
             r        = item["result"]
             evidence = item["evidence"]

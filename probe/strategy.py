@@ -91,6 +91,8 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
                 "pair_id": bp.get("pair_id"),
+                "bool_side": bp.get("bool_side"),
+                "compare_mode": bp.get("compare_mode"),
                 "payload": bp.get("payload"),
             })
     elif "sqli" in vtype:
@@ -106,6 +108,8 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
                 "pair_id": bp.get("pair_id"),
+                "bool_side": bp.get("bool_side"),
+                "compare_mode": bp.get("compare_mode"),
                 "payload": bp.get("payload"),
             })
     return records
@@ -170,9 +174,10 @@ def build_tasks(
             }
 
             used_payloads: set[str] = set()
+            emitted_baselines: set[str] = set()
             point_label = f"{_base_url(action).split('/')[-1]}_{name}"
 
-            def _emit(payload: str, vtype: str, rec_type, family, pair_id=None, _label=point_label) -> None:
+            def _emit(payload: str, vtype: str, rec_type, family, pair_id=None, bool_side=None, compare_mode=None, _label=point_label) -> None:
                 nonlocal tid
                 if not payload or payload in used_payloads:
                     return
@@ -193,15 +198,77 @@ def build_tasks(
                     "base_value": value,
                     "payload": payload,
                     "enctype": target.get("enctype", ""),
-                    "meta": {"vuln_type": vtype, "type": rec_type, "family": family, "pair_id": pair_id},
+                    "meta": {
+                        "vuln_type": vtype,
+                        "type": rec_type,
+                        "family": family,
+                        "pair_id": pair_id,
+                        "bool_side": bool_side,
+                        "compare_mode": compare_mode,
+                    },
+                })
+                tid += 1
+
+            def _emit_pair_baseline(vtype: str, rec_type, pair_id, compare_mode=None, _label=point_label) -> None:
+                nonlocal tid
+                if not pair_id or pair_id in emitted_baselines:
+                    return
+                emitted_baselines.add(pair_id)
+                out.append({
+                    "id": f"t{tid:06d}_r",
+                    "point": _label,
+                    "url": action,
+                    "method": method,
+                    "inject_location": inject_location,
+                    "inject_param": name,
+                    "inject_mode": "replace",
+                    "base_params": base_params,
+                    "base_cookies": base_cookie or {},
+                    "base_value": value,
+                    "payload": value,
+                    "enctype": target.get("enctype", ""),
+                    "meta": {
+                        "vuln_type": vtype,
+                        "type": rec_type,
+                        "family": "baseline_original",
+                        "pair_id": pair_id,
+                        "bool_side": "baseline",
+                        "compare_mode": compare_mode,
+                    },
                 })
                 tid += 1
 
             for vtype in vuln_types:
                 for rec in flat.get(vtype, []):
                     if isinstance(rec, dict):
-                        _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
+                        pair_id = rec.get("pair_id")
+                        bool_side = rec.get("bool_side")
+                        compare_mode = rec.get("compare_mode")
+                        if pair_id and bool_side in {"true", "false", "sleep", "no_sleep"}:
+                            _emit_pair_baseline(vtype, rec.get("type"), pair_id, compare_mode)
+                        _emit(
+                            rec.get("payload"),
+                            vtype,
+                            rec.get("type"),
+                            rec.get("family"),
+                            pair_id,
+                            bool_side,
+                            compare_mode,
+                        )
                 for rec in _get_baseline_records_by_type(vtype):
-                    _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
+                    pair_id = rec.get("pair_id")
+                    bool_side = rec.get("bool_side")
+                    compare_mode = rec.get("compare_mode")
+                    if pair_id and bool_side in {"true", "false", "sleep", "no_sleep"}:
+                        _emit_pair_baseline(vtype, rec.get("type"), pair_id, compare_mode)
+                    _emit(
+                        rec.get("payload"),
+                        vtype,
+                        rec.get("type"),
+                        rec.get("family"),
+                        pair_id,
+                        bool_side,
+                        compare_mode,
+                    )
 
     return out

@@ -1,19 +1,18 @@
+import json
 import os
 from typing import Callable
 from urllib.parse import urlparse
 from dataclasses import asdict
-
 from crawl.auth import make_login, load_cookies, save_cookies
 from crawl.crawler import Crawler
 from crawl.target_builder import build_targets
-from payload.generator import run as generate_run
 from probe.strategy import build_tasks
 from probe.executor import execute
+from bac.vertical import run_vertical_probe
+from payload.generator import run as generate_run
 from analyzer import validate as analyze_results
 from findings import load_findings, save_findings
-from bac.vertical import run_vertical_probe
 from misconfig.checker import run as misconfig_run
-from utilities import ensure_parent_dir, load_json, save_json
 
 TASK_LABELS = {
     "crawl":    "크롤링 및 타깃 구성",
@@ -82,7 +81,7 @@ def _task_bac_crawl(run_path_fn, target_url, emit_progress=None):
     acquired = [r for r in role_sessions if role_sessions[r] or r == "guest"]
     print(f"[BAC CRAWL] 세션: {acquired}")
 
-    ensure_parent_dir(crawl_file)
+    os.makedirs(os.path.dirname(crawl_file) or ".", exist_ok=True)
     save_cookies(run_path_fn, role_sessions)
 
     role_pages: dict[str, list[dict]] = {}
@@ -109,12 +108,14 @@ def _task_bac_crawl(run_path_fn, target_url, emit_progress=None):
     merged_pages = _merge_crawl_results(role_pages)
     print(f"[BAC CRAWL] {len(merged_pages)} 페이지 발견됨")
 
-    save_json(crawl_file, merged_pages)
+    with open(crawl_file, "w", encoding="utf-8") as f:
+        json.dump(merged_pages, f, ensure_ascii=False, indent=2)
 
     _prog(emit_progress, 20)
 
     targets = build_targets(merged_pages)
-    save_json(targets_file, targets)
+    with open(targets_file, "w", encoding="utf-8") as f:
+        json.dump(targets, f, ensure_ascii=False, indent=2)
     print(f"[BAC CRAWL] 타겟 저장됨: {targets_file} ({len(targets)}개)")
 
 
@@ -125,6 +126,7 @@ def _task_bac_vertical(run_path_fn, target_url=None, emit_progress=None):
         return
 
     if target_url:
+        from crawl.auth import make_login
         print("[BAC] refreshing session cookies before vertical probe")
         refreshed = make_login(
             base_url=target_url,
@@ -132,7 +134,10 @@ def _task_bac_vertical(run_path_fn, target_url=None, emit_progress=None):
         )
 
         roles_file = run_path_fn("auth_cookies_roles.json")
-        existing: dict = load_json(roles_file, {})
+        existing: dict = {}
+        if os.path.exists(roles_file):
+            with open(roles_file, encoding="utf-8") as f:
+                existing = json.load(f)
 
         # 로그인 성공한 role만 덮어쓰고, 실패한 role은 기존 쿠키 유지
         for role, cookies in refreshed.items():
@@ -142,7 +147,8 @@ def _task_bac_vertical(run_path_fn, target_url=None, emit_progress=None):
             elif role not in existing:
                 existing[role] = {}
 
-        save_json(roles_file, existing)
+        with open(roles_file, "w", encoding="utf-8") as f:
+            json.dump(existing, f, ensure_ascii=False, indent=2)
 
     results = run_vertical_probe(
         run_path_fn,
@@ -171,7 +177,8 @@ def _task_bac_stream(run_path_fn, target_url=None, emit_progress=None):
         _prog(emit_progress, 100)
         return
 
-    results = load_json(bac_results_file, [])
+    with open(bac_results_file, encoding="utf-8") as f:
+        results = json.load(f)
 
     findings = analyze_results(results)
     save_findings(findings, bac_findings_file)
@@ -224,13 +231,16 @@ def _task_crawl(run_path_fn, target_url, emit_progress=None):
     merged_pages = _merge_crawl_results(role_pages)
     print(f"[CRAWL] {len(merged_pages)} 페이지 발견됨")
 
-    save_json(crawl_file, merged_pages)
+    os.makedirs(os.path.dirname(crawl_file) or ".", exist_ok=True)
+    with open(crawl_file, "w", encoding="utf-8") as f:
+        json.dump(merged_pages, f, ensure_ascii=False, indent=2)
     print(f"[CRAWL] 저장됨: {crawl_file}")
 
     _prog(emit_progress, 20)
 
     targets = build_targets(merged_pages)
-    save_json(targets_file, targets)
+    with open(targets_file, "w", encoding="utf-8") as f:
+        json.dump(targets, f, ensure_ascii=False, indent=2)
     print(f"[CRAWL] 타겟 정보 저장됨: {targets_file} ({len(targets)})")
 
 
@@ -256,8 +266,10 @@ def _task_probe(run_path_fn, payloads_file, emit_progress=None):
         print(f"[ERROR] 크롤링한 파일이 없음: {targets_file}")
         return
 
-    payloads = load_json(payloads_file, [])
-    targets = load_json(targets_file, [])
+    with open(payloads_file, encoding="utf-8") as f:
+        payloads = json.load(f)
+    with open(targets_file, encoding="utf-8") as f:
+        targets = json.load(f)
 
     role_cookies = load_cookies(run_path_fn)
     base_cookie: dict = role_cookies.get("member1") or {}
@@ -267,7 +279,8 @@ def _task_probe(run_path_fn, payloads_file, emit_progress=None):
         print("[PROBE] 인증 파일 없음. 인증없이 진행")
 
     tasks = build_tasks(payloads, targets, base_cookie=base_cookie)
-    save_json(probe_tasks_file, tasks)
+    with open(probe_tasks_file, "w", encoding="utf-8") as f:
+        json.dump(tasks, f, ensure_ascii=False, indent=2)
     print(f"[PROBE] tasks saved: {probe_tasks_file} ({len(tasks)})")
     _prog(emit_progress, 35)
 
@@ -280,10 +293,11 @@ def _task_execute(run_path_fn, emit_progress=None):
         print(f"[ERROR] 주입 작업 파일 없음: {probe_tasks_file}")
         return
 
-    tasks = load_json(probe_tasks_file, [])
+    with open(probe_tasks_file, encoding="utf-8") as f:
+        tasks = json.load(f)
 
     def _execute_progress(done, total):
-        _prog(emit_progress, 35 + int(done / max(total, 1) * 55))
+        _prog(emit_progress, 35 + int(done / max(total, 1) * 50))
 
     print(f"[EXEC] start: {len(tasks)} tasks")
     results = execute(tasks, timeout=10, delay=0.0, output_file=exec_file, progress_callback=_execute_progress)
@@ -291,7 +305,7 @@ def _task_execute(run_path_fn, emit_progress=None):
     timeout = sum(1 for r in results if r.get("error") == "timeout")
     err     = sum(1 for r in results if r.get("error") and r.get("error") != "timeout")
     print(f"[EXEC] done: ok={ok}, timeout={timeout}, error={err}")
-    _prog(emit_progress, 90)
+    _prog(emit_progress, 85)
 
 
 def _task_validate(run_path_fn, emit_progress=None):
@@ -302,10 +316,11 @@ def _task_validate(run_path_fn, emit_progress=None):
         print(f"[ERROR] 실행 결과 파일이 없음: {exec_file}")
         return
 
-    results = load_json(exec_file, [])
+    with open(exec_file, encoding="utf-8") as f:
+        results = json.load(f)
 
     def _validate_progress(done, total):
-        _prog(emit_progress, 90 + int(done / max(total, 1) * 5))
+        _prog(emit_progress, 90 + int(done / max(total, 1) * 10))
 
     findings = analyze_results(results, progress_callback=_validate_progress)
     save_findings(findings, findings_file)
@@ -329,7 +344,7 @@ def _task_misconfig(run_path_fn, target_url, emit_progress=None):
     findings = misconfig_run(
         base_url=target_url,
         output_file=findings_file,
-        progress_callback=lambda done, total: _prog(emit_progress, 95 + int(done / max(total, 1) * 5)),
+        progress_callback=lambda done, total: _prog(emit_progress, int(done / max(total, 1) * 100)),
         append=True,
     )
     confirmed = sum(1 for f in findings if f.get("type") == "MISCONFIG_CONFIRMED")
@@ -341,7 +356,7 @@ def _task_misconfig(run_path_fn, target_url, emit_progress=None):
 def _task_main_stream(run_path_fn, target_url, payloads_file, payloads_meta_file, skip_crawl=False, resume=False, emit_progress=None):
     _prog(emit_progress, 2)
 
-    # --- 크롤링 ---
+    # ── 크롤링 ──
     crawl_done = os.path.exists(run_path_fn("crawl_result.json")) and os.path.exists(run_path_fn("targets.json"))
     if resume and crawl_done:
         print("[CRAWL] 이전 크롤링 결과 재사용 (resume)")
@@ -357,18 +372,20 @@ def _task_main_stream(run_path_fn, target_url, payloads_file, payloads_meta_file
         print("[ERROR] 크롤링 결과 파일 없음 — 스캔 중단")
         return
 
-    # --- 페이로드 ---
+    # ── 페이로드 ──
     payload_done = os.path.exists(payloads_file)
     if resume and payload_done:
         try:
-            _cnt = len(load_json(payloads_file, []))
+            with open(payloads_file, encoding="utf-8") as _f:
+                _cnt = len(json.load(_f))
         except Exception:
             _cnt = 0
         print(f"[PAYLOAD] 기존 페이로드 재사용 (resume, {_cnt}개)")
-        _prog(emit_progress, 30)
+        _prog(30)
     elif payload_done:
         try:
-            _cnt = len(load_json(payloads_file, []))
+            with open(payloads_file, encoding="utf-8") as _f:
+                _cnt = len(json.load(_f))
         except Exception:
             _cnt = 0
         print(f"[PAYLOAD] 기존 페이로드 재사용 ({_cnt}개) — 새로 생성하려면 파일 삭제 후 재스캔")
@@ -381,7 +398,7 @@ def _task_main_stream(run_path_fn, target_url, payloads_file, payloads_meta_file
         print("[ERROR] 페이로드 파일 없음 — 스캔 중단")
         return
 
-    # --- 주입 테스트 준비 ---
+    # 주입 테스트 준비 
     probe_done = os.path.exists(run_path_fn("probe_tasks.json"))
     if resume and probe_done:
         print("[PROBE] 기존 주입 테스트 작업 재사용 (resume)")
@@ -394,7 +411,7 @@ def _task_main_stream(run_path_fn, target_url, payloads_file, payloads_meta_file
         print("[ERROR] 퍼징 작업 파일 없음 — 스캔 중단")
         return
 
-    # --- 실행 --- 
+    # 실행
     exec_done = os.path.exists(run_path_fn("execution_results.json"))
     if resume and exec_done:
         print("[EXEC] 기존 실행 결과 재사용 (resume)")
@@ -407,17 +424,20 @@ def _task_main_stream(run_path_fn, target_url, payloads_file, payloads_meta_file
         print("[ERROR] 실행 결과 파일 없음 — 스캔 중단")
         return
 
-    # --- 취약점 판정 ---
+    # ── 취약점 판정 ──
+    from findings import load_findings
     findings_done = any(
         f.get("module") != "misconfig"
         for f in load_findings(run_path_fn("findings.json")))
     if resume and findings_done:
-        print("[VALIDATE] 기존 취약점 판정 결과 재사용 (resume)")
+        print("[ANALYZER] 기존 취약점 판정 결과 재사용 (resume)")
         _prog(emit_progress, 95)
     else:
-        _task_validate(run_path_fn, emit_progress)
-        _prog(emit_progress, 95)
+        _task_validate(run_path_fn, 
+                       emit_progress=lambda pct: _prog(emit_progress, 85 + int((pct - 90) * 10 / 10)),)
 
     # 설정 오류 점검(misconfig) - 항상 재실행
-    _task_misconfig(run_path_fn, target_url, emit_progress)
+    _task_misconfig(run_path_fn,
+                    target_url,
+                    emit_progress=lambda pct: _prog(emit_progress, 95 + int(pct * 5 / 100)),)
     _prog(emit_progress, 100)

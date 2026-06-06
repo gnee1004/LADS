@@ -112,6 +112,7 @@ def _pair_id(r: dict) -> str:
     return str(((r.get("meta") or {}).get("pair_id") or "")).strip()
 
 
+<<<<<<< HEAD
 def _compare_mode(r: dict) -> str:
     mode = str(((r.get("meta") or {}).get("compare_mode") or "")).lower().strip()
     if mode:
@@ -122,6 +123,8 @@ def _compare_mode(r: dict) -> str:
     return "baseline_true"
 
 
+=======
+>>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
 def _body_length(r: dict) -> int:
     body = r.get("response_body") or ""
     return len(body)

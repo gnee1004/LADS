@@ -90,11 +90,8 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
                 "pair_id": bp.get("pair_id"),
-<<<<<<< HEAD
                 "bool_side": bp.get("bool_side"),
                 "compare_mode": bp.get("compare_mode"),
-=======
->>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
                 "payload": bp.get("payload"),
             })
     elif "sqli" in vtype:
@@ -111,11 +108,8 @@ def _get_baseline_records_by_type(vtype: str) -> list[dict]:
                 "type": bp.get("type"),
                 "family": "baseline_" + (bp.get("family") or ""),
                 "pair_id": bp.get("pair_id"),
-<<<<<<< HEAD
                 "bool_side": bp.get("bool_side"),
                 "compare_mode": bp.get("compare_mode"),
-=======
->>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
                 "payload": bp.get("payload"),
             })
     return records
@@ -183,11 +177,7 @@ def build_tasks(
             emitted_baselines: set[str] = set()
             point_label = f"{_base_url(action).split('/')[-1]}_{name}"
 
-<<<<<<< HEAD
             def _emit(payload: str, vtype: str, rec_type, family, pair_id=None, bool_side=None, compare_mode=None, _label=point_label) -> None:
-=======
-            def _emit(payload: str, vtype: str, rec_type, family, pair_id=None, _label=point_label) -> None:
->>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
                 nonlocal tid
                 if not payload or payload in used_payloads:
                     return
@@ -208,7 +198,6 @@ def build_tasks(
                     "base_value": value,
                     "payload": payload,
                     "enctype": target.get("enctype", ""),
-<<<<<<< HEAD
                     "meta": {
                         "vuln_type": vtype,
                         "type": rec_type,
@@ -246,16 +235,12 @@ def build_tasks(
                         "bool_side": "baseline",
                         "compare_mode": compare_mode,
                     },
-=======
-                    "meta": {"vuln_type": vtype, "type": rec_type, "family": family, "pair_id": pair_id},
->>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
                 })
                 tid += 1
 
             for vtype in vuln_types:
                 for rec in flat.get(vtype, []):
                     if isinstance(rec, dict):
-<<<<<<< HEAD
                         pair_id = rec.get("pair_id")
                         bool_side = rec.get("bool_side")
                         compare_mode = rec.get("compare_mode")
@@ -285,10 +270,5 @@ def build_tasks(
                         bool_side,
                         compare_mode,
                     )
-=======
-                        _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
-                for rec in _get_baseline_records_by_type(vtype):
-                    _emit(rec.get("payload"), vtype, rec.get("type"), rec.get("family"), rec.get("pair_id"))
->>>>>>> fab1a43e513d07c9f717b91207a6252cc540d644
 
     return out
